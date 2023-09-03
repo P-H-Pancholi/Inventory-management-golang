@@ -13,8 +13,8 @@ func main() {
 
 	recieveOrderCh := recieveOrder()
 	validOrderCh, InvalidOrderCh := validateOrder(recieveOrderCh)
-	reservedInvCh := reserveOrder(validOrderCh)
-	fillOrderCh := fillOrder(reservedInvCh)
+	reservedInvCh := reserveOrder(validOrderCh) // single producer multiple consumer
+	fillOrderCh := fillOrder(reservedInvCh)     // single consumer multiple producer
 	wg.Add(2)
 
 	go func(InvalidOrderCh <-chan invalidOrder) {
@@ -49,11 +49,24 @@ func fillOrder(in <-chan order) <-chan order {
 
 func reserveOrder(in <-chan order) <-chan order {
 	out := make(chan order)
+	const workers = 3
+	// This demonstrates multiple worker single consumer in case of fillOrders recieving from reserveOrders
+	// In case of recieve order calling validateOrder this demonstrates multiple consumer single worker
+	// You can adjust value of workers as per your need
+	var wg sync.WaitGroup
+	wg.Add(3)
+	for i := 0; i < workers; i++ {
+		go func() {
+			for o := range in {
+				o.Status = reserved
+				out <- o
+			}
+			wg.Done()
+		}()
+	}
+
 	go func() {
-		for o := range in {
-			o.Status = reserved
-			out <- o
-		}
+		wg.Wait()
 		close(out)
 	}()
 
@@ -61,9 +74,9 @@ func reserveOrder(in <-chan order) <-chan order {
 }
 
 func validateOrder(in <-chan order) (<-chan order, <-chan invalidOrder) {
-	// out & invalid are send-only channel as message is going out
+	// out & invalid are initiated inside the function &
+	// returned as recieve only channels because channel will already have message in the buffer
 	// in is receive-only channel as message from the channel is being received
-	//order := <-in
 	out := make(chan order)
 	invalid := make(chan invalidOrder, 1)
 	go func() {
@@ -79,7 +92,9 @@ func validateOrder(in <-chan order) (<-chan order, <-chan invalidOrder) {
 	}()
 	return out, invalid
 }
-func recieveOrder() <-chan order { // out is send-only channel receiving from out will throw error
+func recieveOrder() <-chan order {
+	// out is initiated inside the function & returned as reciever-only channel
+	// sending to out will throw error after returning from this function
 	out := make(chan order)
 	go func() {
 		for _, rawOrder := range rawOrders {

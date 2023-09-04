@@ -39,7 +39,7 @@ func fillOrder(in <-chan order) <-chan order {
 	out := make(chan order)
 	go func() {
 		for o := range in {
-			o.Status = filled
+			o.Status = filled // changing the status to be filled
 			out <- o
 		}
 		close(out)
@@ -58,7 +58,7 @@ func reserveOrder(in <-chan order) <-chan order {
 	for i := 0; i < workers; i++ {
 		go func() {
 			for o := range in {
-				o.Status = reserved
+				o.Status = reserved // reserving the order
 				out <- o
 			}
 			wg.Done()
